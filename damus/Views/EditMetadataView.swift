@@ -62,6 +62,7 @@ struct EditMetadataView: View {
     @State var name: String
     @State var ln: String
     @State var website: String
+	@State var moneroWallet: String
     
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
@@ -78,6 +79,7 @@ struct EditMetadataView: View {
         _banner = State(initialValue: data?.banner ?? "")
         _nip05 = State(initialValue: data?.nip05 ?? "")
         _ln = State(initialValue: data?.lud16 ?? data?.lud06 ?? "")
+		_moneroWallet = State(initialValue:data?.wallets?["monero"] ?? "")
     }
     
     func imageBorderColor() -> Color {
@@ -94,7 +96,8 @@ struct EditMetadataView: View {
             picture: picture.isEmpty ? nil : picture,
             banner: banner.isEmpty ? nil : banner,
             lud06: ln.contains("@") ? nil : ln,
-            lud16: ln.contains("@") ? ln : nil
+            lud16: ln.contains("@") ? ln : nil,
+			wallets: ["monero":moneroWallet]
         );
         
         let m_metadata_ev = make_metadata_event(keypair: damus_state.keypair, metadata: metadata)
@@ -185,7 +188,12 @@ struct EditMetadataView: View {
                         .autocorrectionDisabled(true)
                         .textInputAutocapitalization(.never)
                 }
-                                
+				
+				Section(content: {
+					TextField("Monero Address", text:$moneroWallet).autocorrectionDisabled(true).textInputAutocapitalization(.never)
+				}, header: {
+					Text("Monero Wallet Address")
+				})
                 Section(content: {
                     TextField(NSLocalizedString("jb55@jb55.com", comment: "Placeholder example text for identifier used for NIP-05 verification."), text: $nip05)
                         .autocorrectionDisabled(true)
@@ -199,6 +207,8 @@ struct EditMetadataView: View {
                         Text("'\(nip05)' is an invalid NIP-05 identifier. It should look like an email.", comment: "Description of why the nip05 identifier is invalid.")
                     }
                 })
+				
+				
 
                 Button(NSLocalizedString("Save", comment: "Button for saving profile.")) {
                     save()

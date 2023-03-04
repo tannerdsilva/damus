@@ -33,6 +33,9 @@ struct ProfileNameView: View {
                     Spacer()
                     KeyView(pubkey: pubkey)
                         .pubkey_context_menu(bech32_pubkey: pubkey)
+					if let hasMonero = profile?.wallets?["monero"] {
+						KeyView(pubkey: hasMonero)
+					}
                 }
             } else {
                 VStack(alignment: .leading) {
@@ -45,6 +48,9 @@ struct ProfileNameView: View {
                     }
                     KeyView(pubkey: pubkey)
                         .pubkey_context_menu(bech32_pubkey: pubkey)
+					if let hasMonero = profile?.wallets?["monero"] {
+						KeyView(pubkey: hasMonero)
+					}
                 }
             }
         }

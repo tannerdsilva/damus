@@ -93,7 +93,7 @@ struct ProfileName: View {
 struct EventProfileName: View {
     let damus_state: DamusState
     let pubkey: String
-    let profile: Profile?
+    let profile:Profile?
     let prefix: String
     
     let show_friend_confirmed: Bool
