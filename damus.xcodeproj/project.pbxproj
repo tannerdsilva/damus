@@ -185,7 +185,6 @@
 		4CE6DEF827F7A08200C66700 /* damusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CE6DEF727F7A08200C66700 /* damusTests.swift */; };
 		4CE6DF0227F7A08200C66700 /* damusUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CE6DF0127F7A08200C66700 /* damusUITests.swift */; };
 		4CE6DF0427F7A08200C66700 /* damusUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CE6DF0327F7A08200C66700 /* damusUITestsLaunchTests.swift */; };
-		4CE6DF1227F7A2B300C66700 /* Starscream in Frameworks */ = {isa = PBXBuildFile; productRef = 4CE6DF1127F7A2B300C66700 /* Starscream */; };
 		4CE6DF1627F8DEBF00C66700 /* RelayConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CE6DF1527F8DEBF00C66700 /* RelayConnection.swift */; };
 		4CE8794829941DA700F758CC /* RelayFilters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CE8794729941DA700F758CC /* RelayFilters.swift */; };
 		4CE8794C2995B59E00F758CC /* RelayMetadatas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CE8794B2995B59E00F758CC /* RelayMetadatas.swift */; };
@@ -231,6 +230,9 @@
 		7CFF6317299FEFE5005D382A /* SelectableText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CFF6316299FEFE5005D382A /* SelectableText.swift */; };
 		9609F058296E220800069BF3 /* BannerImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9609F057296E220800069BF3 /* BannerImageView.swift */; };
 		9C83F89329A937B900136C08 /* TextViewWrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C83F89229A937B900136C08 /* TextViewWrapper.swift */; };
+		AEB73D2A29B310530057FB9B /* HummingbirdWSClient in Frameworks */ = {isa = PBXBuildFile; productRef = AEB73D2929B310530057FB9B /* HummingbirdWSClient */; };
+		AEB73D2D29B318DD0057FB9B /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = AEB73D2C29B318DD0057FB9B /* Logging */; };
+		AEB73D3029B334AD0057FB9B /* SwiftBlake2 in Frameworks */ = {isa = PBXBuildFile; productRef = AEB73D2F29B334AD0057FB9B /* SwiftBlake2 */; };
 		BA693074295D649800ADDB87 /* UserSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA693073295D649800ADDB87 /* UserSettingsStore.swift */; };
 		BAB68BED29543FA3007BA466 /* SelectWalletView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAB68BEC29543FA3007BA466 /* SelectWalletView.swift */; };
 		DD597CBD2963D85A00C64D32 /* MarkdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD597CBC2963D85A00C64D32 /* MarkdownTests.swift */; };
@@ -592,9 +594,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				4C06670428FC7EC500038D2A /* Kingfisher in Frameworks */,
+				AEB73D3029B334AD0057FB9B /* SwiftBlake2 in Frameworks */,
 				6C7DE41F2955169800E66263 /* Vault in Frameworks */,
-				4CE6DF1227F7A2B300C66700 /* Starscream in Frameworks */,
+				AEB73D2A29B310530057FB9B /* HummingbirdWSClient in Frameworks */,
 				4C649881286E0EE300EAE2B3 /* secp256k1 in Frameworks */,
+				AEB73D2D29B318DD0057FB9B /* Logging in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1139,10 +1143,12 @@
 			);
 			name = damus;
 			packageProductDependencies = (
-				4CE6DF1127F7A2B300C66700 /* Starscream */,
 				4C649880286E0EE300EAE2B3 /* secp256k1 */,
 				4C06670328FC7EC500038D2A /* Kingfisher */,
 				6C7DE41E2955169800E66263 /* Vault */,
+				AEB73D2929B310530057FB9B /* HummingbirdWSClient */,
+				AEB73D2C29B318DD0057FB9B /* Logging */,
+				AEB73D2F29B334AD0057FB9B /* SwiftBlake2 */,
 			);
 			productName = damus;
 			productReference = 4CE6DEE327F7A08100C66700 /* damus.app */;
@@ -1236,10 +1242,12 @@
 			);
 			mainGroup = 4CE6DEDA27F7A08100C66700;
 			packageReferences = (
-				4CE6DF1027F7A2B300C66700 /* XCRemoteSwiftPackageReference "Starscream" */,
 				4C64987F286E0EE300EAE2B3 /* XCRemoteSwiftPackageReference "secp256k1" */,
 				4C06670228FC7EC500038D2A /* XCRemoteSwiftPackageReference "Kingfisher" */,
 				6C7DE41D2955169800E66263 /* XCRemoteSwiftPackageReference "Vault" */,
+				AEB73D2829B310530057FB9B /* XCRemoteSwiftPackageReference "hummingbird-websocket" */,
+				AEB73D2B29B318DD0057FB9B /* XCRemoteSwiftPackageReference "swift-log" */,
+				AEB73D2E29B334AD0057FB9B /* XCRemoteSwiftPackageReference "SwiftBlake2" */,
 			);
 			productRefGroup = 4CE6DEE427F7A08100C66700 /* Products */;
 			projectDirPath = "";
@@ -1676,7 +1684,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MACOSX_DEPLOYMENT_TARGET = 12.3;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -1733,7 +1741,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MACOSX_DEPLOYMENT_TARGET = 12.3;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -1962,20 +1970,36 @@
 				revision = 40b4b38b3b1c83f7088c76189a742870e0ca06a9;
 			};
 		};
-		4CE6DF1027F7A2B300C66700 /* XCRemoteSwiftPackageReference "Starscream" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/daltoniam/Starscream";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 4.0.0;
-			};
-		};
 		6C7DE41D2955169800E66263 /* XCRemoteSwiftPackageReference "Vault" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/SparrowTek/Vault";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 1.0.0;
+			};
+		};
+		AEB73D2829B310530057FB9B /* XCRemoteSwiftPackageReference "hummingbird-websocket" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/hummingbird-project/hummingbird-websocket.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+		AEB73D2B29B318DD0057FB9B /* XCRemoteSwiftPackageReference "swift-log" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-log";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+		AEB73D2E29B334AD0057FB9B /* XCRemoteSwiftPackageReference "SwiftBlake2" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/tannerdsilva/SwiftBlake2";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.0.3;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -1991,15 +2015,25 @@
 			package = 4C64987F286E0EE300EAE2B3 /* XCRemoteSwiftPackageReference "secp256k1" */;
 			productName = secp256k1;
 		};
-		4CE6DF1127F7A2B300C66700 /* Starscream */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 4CE6DF1027F7A2B300C66700 /* XCRemoteSwiftPackageReference "Starscream" */;
-			productName = Starscream;
-		};
 		6C7DE41E2955169800E66263 /* Vault */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 6C7DE41D2955169800E66263 /* XCRemoteSwiftPackageReference "Vault" */;
 			productName = Vault;
+		};
+		AEB73D2929B310530057FB9B /* HummingbirdWSClient */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AEB73D2829B310530057FB9B /* XCRemoteSwiftPackageReference "hummingbird-websocket" */;
+			productName = HummingbirdWSClient;
+		};
+		AEB73D2C29B318DD0057FB9B /* Logging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AEB73D2B29B318DD0057FB9B /* XCRemoteSwiftPackageReference "swift-log" */;
+			productName = Logging;
+		};
+		AEB73D2F29B334AD0057FB9B /* SwiftBlake2 */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AEB73D2E29B334AD0057FB9B /* XCRemoteSwiftPackageReference "SwiftBlake2" */;
+			productName = SwiftBlake2;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
