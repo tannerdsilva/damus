@@ -77,20 +77,24 @@ final actor RelayConnection:ObservableObject {
     /// the url of the relay connection
     public let url:String
 
-	
-	public var reconnectionDelayTimeNanoseconds:UInt64
+	/// the time to wait before attempting to reconnect to the relay after a connection is closed
+	public var reconnectionDelayTimeNanoseconds:UInt64 = 30_000_000_000 // (default: 30 seconds)
 
     /// the state of the relay connection
-    @Published public private(set) var state:State = .disconnected
+    @Published public private(set) var state:State = .disconnected {
+        didSet {
+            self.handler(.stateChange(self.state))
+        }
+    }
 
     /// the event handler for this connection
     fileprivate let handler:Handler
 
-    /// whether or not the connection should attempt to reconnect after it is closed
-    /// - when `true`, the connection will not attempt to reconnect after it is closed
+    /// whether or not the instance should ignore user requests to reconnect to the relay
+    /// - when `true`, the connection will NEVER reconnect to the relay after a connection is closed
     fileprivate var reconnectOverride:Bool = false
 	
-    /// the deferred task that is used to reconnect to the relay after a connection is closed
+    /// the deferred task that is used to reconnect to the relay after a connection is closed (or upon initialization)
 	fileprivate var reconnectionTask:Task<(), Swift.Error>? = nil
 
     /// initialize a new relay connection. the connection will be started immediately.
@@ -99,29 +103,39 @@ final actor RelayConnection:ObservableObject {
         self.handler = handler
 
         // connect to the relay in the background
-        Task.detached { [weak self] in
+        self.reconnectionTask = Task.detached { [weak self] in
             guard let self = self else { return }
-            try await self.connect() // start the connection
+            try await self.connect(retryLaterIfFailed:true) // start the connection
         }
     }
 
     /// called internally when the websocket connection is closed. this will attempt to reconnect to the relay after a delay
     fileprivate func websocketWasClosed(retry:Bool = true) {
+        // ensure that the connection is in the correct state
+        guard self.state == .connected else { return }
         Self.logger.debug("disconnected from relay.", metadata: ["url": "\(url)"])
+        
+        // update the state to reflect the disconnection
         self.websocket = nil
         self.state = .disconnected
-        guard reconnectOverride == false else { return }
-        self.reconnectionTask = Task.detached { [weak self] in
-            // sleep for 90 seconds
-            try await Task.sleep(nanoseconds:30_000_000_000)
+        if let hasReconnectionTask = self.reconnectionTask {
+            hasReconnectionTask.cancel()
+            self.reconnectionTask = nil
+        }
+        // launch a task to reconnect to the relay if specified to do so
+        guard reconnectOverride == true || retry == true else { return }
+        self.reconnectionTask = Task.detached { [weak self, time = reconnectionDelayTimeNanoseconds, reconn = retry] in
+            // sleep for the configured amount of time
+            try await Task.sleep(nanoseconds:time)
 
             // attempt to reconnect
             guard let self = self else { return }
-            try await self.connect()
+            try await self.connect(retryLaterIfFailed:reconn)
         }
     }
 
     /// connects to the relay. this will attempt to reconnect to the relay if the connection fails, unless `retryLaterIfFailed` is false
+    /// - will only connect if the connection is in the ``State/disconnected`` state
     func connect(retryLaterIfFailed:Bool = true) async throws {
 		guard self.state == .disconnected else {
 			Self.logger.error("unable to connect to relay - state was not 'disconnected'.", metadata:["state":"\(self.state)"])
@@ -132,38 +146,56 @@ final actor RelayConnection:ObservableObject {
             self.state = .connecting
             let newURL = HBURL(self.url)
 			let newWS = try await HBWebSocketClient.connect(url:newURL, configuration: HBWebSocketClient.Configuration(), on:loopGroup.next())
-			// if not throwing, then we have a connection
+			newWS.initiateAutoPing(interval:.seconds(10))   // ensure the state of the connection is always checked
+            
+            // if not throwing, then we have a connection. update the internal state
             self.state = .connected
-            newWS.initiateAutoPing(interval:.seconds(10))   // ensure the state of the connection is always checked
-
+            if let hasReconnectionTask = self.reconnectionTask {
+                hasReconnectionTask.cancel()
+                self.reconnectionTask = nil
+            }
+            self.websocket = newWS
+            
             // handle reading 
             newWS.onRead { [hndlr = handler] readInfo, _ in
                 switch readInfo {
                 case var .binary(byteBuff):
                     if let hasData = byteBuff.readData(length:byteBuff.readableBytes) {
                         hndlr(.data(hasData))
+                    } else {
+                        Self.logger.debug("unable to read data from websocket.", metadata:["readInfo":"\(readInfo)", "url":"\(self.url)"])
                     }
                 case let .text(stringInfo):
                     hndlr(.text(stringInfo))
                 }
             }
             // handle closing
-            newWS.onClose { [weak self] _ in
+            newWS.onClose { [weak self, reconn = retryLaterIfFailed] _ in
                 Task.detached { [weak self] in
                     guard let self = self else { return }
-                    await self.websocketWasClosed()
+                    await self.websocketWasClosed(retry:reconn)
                 }
             }
         } catch let error {
 			Self.logger.error("unable to connect to relay.", metadata:["url":"\(self.url)", "error":"\(error)"])
+            // update the state to reflect the disconnection
 			self.state = .disconnected
-            let reconnTask = Task.detached { [weak self] in
-                // sleep for 90 seconds
-                try await Task.sleep(nanoseconds:90_000_000_000)
+            self.websocket = nil
+            if let hasReconnectionTask = self.reconnectionTask {
+                hasReconnectionTask.cancel()
+                self.reconnectionTask = nil
+            }
 
-                // attempt to reconnect
-                guard let self = self else { return }
-                try await self.connect()
+            // launch a new task to reconnect to the relay if specified to do so
+            if retryLaterIfFailed {
+                self.reconnectionTask = Task.detached { [weak self, time = reconnectionDelayTimeNanoseconds] in
+                    // sleep for the configured amount of time
+                    try await Task.sleep(nanoseconds:time)
+
+                    // attempt to reconnect
+                    guard let self = self else { return }
+                    try await self.connect(retryLaterIfFailed:retryLaterIfFailed)
+                }
             }
         }
     }
