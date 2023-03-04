@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import Starscream
 
 var BOOTSTRAP_RELAYS = [
     "wss://relay.damus.io",

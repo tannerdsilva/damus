@@ -9,6 +9,7 @@ import Foundation
 import LinkPresentation
 
 struct DamusState {
+    
     let pool: RelayPool
     let keypair: Keypair
     let likes: EventCounter

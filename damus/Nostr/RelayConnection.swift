@@ -6,115 +6,319 @@
 //
 
 import Foundation
-import Starscream
+import Hummingbird
+import HummingbirdWSCore
+import HummingbirdWSClient
+import NIO
+import Logging
 
-enum NostrConnectionEvent {
-    case ws_event(WebSocketEvent)
-    case nostr_event(NostrResponse)
+/*
+public enum WebSocketEvent {
+    case connected([String: String])
+    case disconnected(String, UInt16)
+    case text(String)
+    case binary(Data)
+    case pong(Data?)
+    case ping(Data?)
+    case error(Error?)
+    case viabilityChanged(Bool)
+    case reconnectSuggested(Bool)
+    case cancelled
 }
+*/
 
-final class RelayConnection: WebSocketDelegate {
-    private(set) var isConnected = false
-    private(set) var isConnecting = false
-    private(set) var isReconnecting = false
-    
-    private(set) var last_connection_attempt: TimeInterval = 0
-    private lazy var socket = {
-        let req = URLRequest(url: url)
-        let socket = WebSocket(request: req, compressionHandler: .none)
-        socket.delegate = self
-        return socket
-    }()
-    private var handleEvent: (NostrConnectionEvent) -> ()
-    private let url: URL
+/// Primary interface for interacting with a nostr relay
+final actor RelayConnection:ObservableObject {
+    /// the errors that can be thrown by a relay connection interface
+	enum Error:Swift.Error {
+        /// the interface was in an invalid state for the requested operation
+		case invalidState
 
-    init(url: URL, handleEvent: @escaping (NostrConnectionEvent) -> ()) {
+        /// kinda stupid to have this here but it is here nonetheless
+        case encodingError
+	}
+
+    /// the default event loop group used for all relay connections (unless otherwise specified for a particular connection)
+    public static let defaultPool = MultiThreadedEventLoopGroup(numberOfThreads:System.coreCount)
+
+    /// the logger used by all relay connections
+    public static var logger = Logger(label: "relay-ctx")
+
+    /// the event handler type that relay connections use to pass events to the caller
+    public typealias Handler = (Event) -> Void
+
+    /// The various states that a relay connection can be in
+	public enum State:UInt8 {
+        /// There is no connection to the relay
+		case disconnected = 0
+        /// There is a connection attempt in progress
+		case connecting = 1
+        /// There is an active connection to the relay
+		case connected = 2
+	}
+
+    /// Events that can be passed to the relay connection handler
+    public enum Event {
+        /// the connection state has changed
+        case stateChange(State)
+        /// the connection has received a binary message
+        case data(Data)
+        /// the connection has received a text message
+        case text(String)
+    }
+
+    /// the multi-threaded event loop group used for this connection
+    fileprivate let loopGroup:MultiThreadedEventLoopGroup = RelayConnection.defaultPool
+
+    /// the websocket connection to the relay (if it exists)
+	/// - assumed to never be nil when state == ``State/disconnected``
+    fileprivate var websocket:HBWebSocket? = nil
+
+    /// the url of the relay connection
+    public let url:String
+
+	
+	public var reconnectionDelayTimeNanoseconds:UInt64
+
+    /// the state of the relay connection
+    @Published public private(set) var state:State = .disconnected
+
+    /// the event handler for this connection
+    fileprivate let handler:Handler
+
+    /// whether or not the connection should attempt to reconnect after it is closed
+    /// - when `true`, the connection will not attempt to reconnect after it is closed
+    fileprivate var reconnectOverride:Bool = false
+	
+    /// the deferred task that is used to reconnect to the relay after a connection is closed
+	fileprivate var reconnectionTask:Task<(), Swift.Error>? = nil
+
+    /// initialize a new relay connection. the connection will be started immediately.
+    init(url:String, _ handler:@escaping Handler) {
         self.url = url
-        self.handleEvent = handleEvent
-    }
-    
-    func reconnect() {
-        if isConnected {
-            isReconnecting = true
-            disconnect()
-        } else {
-            // we're already disconnected, so just connect
-            connect(force: true)
+        self.handler = handler
+
+        // connect to the relay in the background
+        Task.detached { [weak self] in
+            guard let self = self else { return }
+            try await self.connect() // start the connection
         }
     }
-    
-    func connect(force: Bool = false) {
-        if !force && (isConnected || isConnecting) {
-            return
+
+    /// called internally when the websocket connection is closed. this will attempt to reconnect to the relay after a delay
+    fileprivate func websocketWasClosed(retry:Bool = true) {
+        Self.logger.debug("disconnected from relay.", metadata: ["url": "\(url)"])
+        self.websocket = nil
+        self.state = .disconnected
+        guard reconnectOverride == false else { return }
+        self.reconnectionTask = Task.detached { [weak self] in
+            // sleep for 90 seconds
+            try await Task.sleep(nanoseconds:30_000_000_000)
+
+            // attempt to reconnect
+            guard let self = self else { return }
+            try await self.connect()
         }
-        
-        isConnecting = true
-        last_connection_attempt = Date().timeIntervalSince1970
-        socket.connect()
     }
 
-    func disconnect() {
-        socket.disconnect()
-        isConnected = false
-        isConnecting = false
-    }
+    /// connects to the relay. this will attempt to reconnect to the relay if the connection fails, unless `retryLaterIfFailed` is false
+    func connect(retryLaterIfFailed:Bool = true) async throws {
+		guard self.state == .disconnected else {
+			Self.logger.error("unable to connect to relay - state was not 'disconnected'.", metadata:["state":"\(self.state)"])
+			throw Error.invalidState
+		}
+        do {
+            // attempt to connect
+            self.state = .connecting
+            let newURL = HBURL(self.url)
+			let newWS = try await HBWebSocketClient.connect(url:newURL, configuration: HBWebSocketClient.Configuration(), on:loopGroup.next())
+			// if not throwing, then we have a connection
+            self.state = .connected
+            newWS.initiateAutoPing(interval:.seconds(10))   // ensure the state of the connection is always checked
 
-    func send(_ req: NostrRequest) {
-        guard let req = make_nostr_req(req) else {
-            print("failed to encode nostr req: \(req)")
-            return
-        }
-
-        socket.write(string: req)
-    }
-    
-    // MARK: - WebSocketDelegate
-    
-    func didReceive(event: WebSocketEvent, client: WebSocket) {
-        switch event {
-        case .connected:
-            self.isConnected = true
-            self.isConnecting = false
-
-        case .disconnected:
-            self.isConnecting = false
-            self.isConnected = false
-            if self.isReconnecting {
-                self.isReconnecting = false
-                self.connect()
-            }
-
-        case .cancelled, .error:
-            self.isConnecting = false
-            self.isConnected = false
-
-        case .text(let txt):
-            if txt.count > 2000 {
-                DispatchQueue.global(qos: .default).async {
-                    if let ev = decode_nostr_event(txt: txt) {
-                        DispatchQueue.main.async {
-                            self.handleEvent(.nostr_event(ev))
-                        }
-                        return
+            // handle reading 
+            newWS.onRead { [hndlr = handler] readInfo, _ in
+                switch readInfo {
+                case var .binary(byteBuff):
+                    if let hasData = byteBuff.readData(length:byteBuff.readableBytes) {
+                        hndlr(.data(hasData))
                     }
-                }
-            } else {
-                if let ev = decode_nostr_event(txt: txt) {
-                    handleEvent(.nostr_event(ev))
-                    return
+                case let .text(stringInfo):
+                    hndlr(.text(stringInfo))
                 }
             }
+            // handle closing
+            newWS.onClose { [weak self] _ in
+                Task.detached { [weak self] in
+                    guard let self = self else { return }
+                    await self.websocketWasClosed()
+                }
+            }
+        } catch let error {
+			Self.logger.error("unable to connect to relay.", metadata:["url":"\(self.url)", "error":"\(error)"])
+			self.state = .disconnected
+            let reconnTask = Task.detached { [weak self] in
+                // sleep for 90 seconds
+                try await Task.sleep(nanoseconds:90_000_000_000)
 
-            print("decode failed for \(txt)")
-            // TODO: trigger event error
-
-        default:
-            break
+                // attempt to reconnect
+                guard let self = self else { return }
+                try await self.connect()
+            }
+        }
+    }
+	
+    /// send a request to the relay
+    /// - Throws: 
+    ///     - `Error.encodingError` if the request could not be encoded (this is dumb and should be changed maybe)
+    ///     - `Error.invalidState` if the connection was not in a valid state to send the request
+    ///     - may possibly throw other errors from the underlying websocket library
+	func send(_ req:NostrRequest) async throws {
+        // validate the state
+        guard self.state == .connected, let hasSocket = self.websocket else {
+            Self.logger.error("unable to send request - not currently connected.", metadata:["req":"\(req)"])
+            throw Error.invalidState
         }
 
-        handleEvent(.ws_event(event))
+        // encode the request
+		guard let req = make_nostr_req(req) else {
+            Self.logger.error("unable to encode nostr request.", metadata:["req":"\(req)"])
+			throw Error.encodingError
+		}
+        
+        // write the request
+		try await hasSocket.write(.text(req)).get()
+	}
+
+    func forceClosure() throws {
+        // validate the state
+        guard self.state == .connected, let hasSocket = self.websocket else {
+            Self.logger.error("unable to force close connection - not currently connected.", metadata:["state":"\(self.state)"])
+            throw Error.invalidState
+        }
+
+        // close the connection
+        try await hasSocket.close().get()
     }
 }
+
+// MARK: - RelayConnection & Equatable
+extension RelayConnection:Equatable {
+    static func == (lhs: RelayConnection, rhs: RelayConnection) -> Bool {
+        return lhs.url == rhs.url
+    }
+}
+
+// MARK: - RelayConnection & Hashable
+extension RelayConnection:Hashable {
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(url)
+    }
+}
+
+//
+//final class RelayConnection {
+//    private(set) var isConnected = false
+//    private(set) var isConnecting = false
+//    private(set) var isReconnecting = false
+//
+//    private(set) var last_connection_attempt: TimeInterval = 0
+//    private lazy var socket = {
+//        let req = URLRequest(url: url)
+//        let socket = WebSocket(request: req, compressionHandler: .none)
+//        socket.delegate = self
+//        return socket
+//    }()
+//    private var handleEvent: (NostrConnectionEvent) -> ()
+//    private let url: URL
+//
+//    init(url: URL, handleEvent: @escaping (NostrConnectionEvent) -> ()) {
+//        self.url = url
+//        self.handleEvent = handleEvent
+//    }
+//
+//    func reconnect() {
+//        if isConnected {
+//            isReconnecting = true
+//            disconnect()
+//        } else {
+//            // we're already disconnected, so just connect
+//            connect(force: true)
+//        }
+//    }
+//
+//    func connect(force: Bool = false) {
+//        if !force && (isConnected || isConnecting) {
+//            return
+//        }
+//
+//        isConnecting = true
+//        last_connection_attempt = Date().timeIntervalSince1970
+//        socket.connect()
+//    }
+//
+//    func disconnect() {
+//        socket.disconnect()
+//        isConnected = false
+//        isConnecting = false
+//    }
+//
+//    func send(_ req: NostrRequest) {
+//        guard let req = make_nostr_req(req) else {
+//            print("failed to encode nostr req: \(req)")
+//            return
+//        }
+//
+//        socket.write(string: req)
+//    }
+//
+//    // MARK: - WebSocketDelegate
+//
+//    func didReceive(event: WebSocketEvent, client: WebSocket) {
+//        switch event {
+//        case .connected:
+//            self.isConnected = true
+//            self.isConnecting = false
+//
+//        case .disconnected:
+//            self.isConnecting = false
+//            self.isConnected = false
+//            if self.isReconnecting {
+//                self.isReconnecting = false
+//                self.connect()
+//            }
+//
+//        case .cancelled, .error:
+//            self.isConnecting = false
+//            self.isConnected = false
+//
+//        case .text(let txt):
+//            if txt.count > 2000 {
+//                DispatchQueue.global(qos: .default).async {
+//                    if let ev = decode_nostr_event(txt: txt) {
+//                        DispatchQueue.main.async {
+//                            self.handleEvent(.nostr_event(ev))
+//                        }
+//                        return
+//                    }
+//                }
+//            } else {
+//                if let ev = decode_nostr_event(txt: txt) {
+//                    handleEvent(.nostr_event(ev))
+//                    return
+//                }
+//            }
+//
+//            print("decode failed for \(txt)")
+//            // TODO: trigger event error
+//
+//        default:
+//            break
+//        }
+//
+//        handleEvent(.ws_event(event))
+//    }
+//}
 
 func make_nostr_req(_ req: NostrRequest) -> String? {
     switch req {
